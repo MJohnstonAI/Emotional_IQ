@@ -48,7 +48,8 @@ export default function RevealScreen() {
 
   useEffect(() => {
     if (hasPlayedReward.current) return;
-    hasPlayedReward.current = true;\nconst playRewards = async () => {
+    hasPlayedReward.current = true;
+    const playRewards = async () => {
       try {
         if (score === 100) {
           const medalSound = await Audio.Sound.createAsync(
@@ -335,4 +336,5 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
   },
 });
+
 
