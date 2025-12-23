@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 
 import { useTheme } from "@/design/theme";
 import { palette, radii, typography } from "@/design/tokens";
 import { supabase } from "@/lib/supabase";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const parseFragmentParams = (url: string) => {
   const fragment = url.split("#")[1];
@@ -42,7 +45,7 @@ export default function AuthScreen() {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) throw error;
         setStatus("Signed in successfully.");
-        router.replace("/(tabs)/home");
+        router.replace("/auth-success");
         return;
       }
 
@@ -53,7 +56,7 @@ export default function AuthScreen() {
         });
         if (error) throw error;
         setStatus("Signed in successfully.");
-        router.replace("/(tabs)/home");
+        router.replace("/auth-success");
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Sign-in failed.";
@@ -103,6 +106,39 @@ export default function AuthScreen() {
     }
   };
 
+  const signInWithGoogle = async () => {
+    setStatus(null);
+    if (!supabase) {
+      setStatus("Supabase is not configured.");
+      return;
+    }
+
+    const redirectTo = Linking.createURL("/auth");
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        skipBrowserRedirect: true,
+      },
+    });
+
+    if (error) {
+      setStatus(error.message);
+      return;
+    }
+
+    if (!data?.url) {
+      setStatus("Unable to start Google sign-in.");
+      return;
+    }
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type === "success" && result.url) {
+      setStatus("Completing sign-in...");
+      completeSignIn(result.url);
+    }
+  };
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Text style={[styles.title, { color: colors.textMain }]}>Sign In</Text>
@@ -120,6 +156,9 @@ export default function AuthScreen() {
       />
       <Pressable style={styles.primaryButton} onPress={sendMagicLink}>
         <Text style={styles.primaryButtonText}>Send Magic Link</Text>
+      </Pressable>
+      <Pressable style={styles.googleButton} onPress={signInWithGoogle}>
+        <Text style={styles.googleButtonText}>Sign in with Google</Text>
       </Pressable>
       {status ? <Text style={styles.status}>{status}</Text> : null}
       <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
@@ -168,6 +207,21 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontFamily: typography.fonts.displayBold,
     letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  googleButton: {
+    height: 48,
+    borderRadius: radii.rLg,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  googleButtonText: {
+    color: "#e2e8f0",
+    fontFamily: typography.fonts.displayBold,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
   },
   status: {
