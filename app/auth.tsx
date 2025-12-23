@@ -1,10 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
+import * as Linking from "expo-linking";
 
 import { useTheme } from "@/design/theme";
 import { palette, radii, typography } from "@/design/tokens";
 import { supabase } from "@/lib/supabase";
+
+const parseFragmentParams = (url: string) => {
+  const fragment = url.split("#")[1];
+  if (!fragment) return {} as Record<string, string>;
+  const params = new URLSearchParams(fragment);
+  const values: Record<string, string> = {};
+  params.forEach((value, key) => {
+    values[key] = value;
+  });
+  return values;
+};
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -12,17 +24,82 @@ export default function AuthScreen() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string | null>(null);
 
+  const completeSignIn = async (url: string) => {
+    if (!supabase) return;
+    try {
+      const parsed = Linking.parse(url);
+      const query = parsed.queryParams ?? {};
+      const fragmentParams = parseFragmentParams(url);
+      const code = typeof query.code === "string" ? query.code : undefined;
+      const accessToken =
+        (typeof query.access_token === "string" && query.access_token) ||
+        fragmentParams.access_token;
+      const refreshToken =
+        (typeof query.refresh_token === "string" && query.refresh_token) ||
+        fragmentParams.refresh_token;
+
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) throw error;
+        setStatus("Signed in successfully.");
+        router.replace("/(tabs)/home");
+        return;
+      }
+
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (error) throw error;
+        setStatus("Signed in successfully.");
+        router.replace("/(tabs)/home");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Sign-in failed.";
+      setStatus(message);
+    }
+  };
+
+  useEffect(() => {
+    const handleUrl = ({ url }: { url: string }) => {
+      setStatus("Completing sign-in...");
+      completeSignIn(url);
+    };
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl({ url });
+    });
+
+    const subscription = Linking.addEventListener("url", handleUrl);
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   const sendMagicLink = async () => {
     setStatus(null);
     if (!supabase) {
       setStatus("Supabase is not configured.");
       return;
     }
-    const { error } = await supabase.auth.signInWithOtp({ email });
+
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setStatus("Enter a valid email address.");
+      return;
+    }
+
+    const redirectTo = Linking.createURL("/auth");
+    const { error } = await supabase.auth.signInWithOtp({
+      email: trimmed,
+      options: { emailRedirectTo: redirectTo },
+    });
+
     if (error) {
       setStatus(error.message);
     } else {
-      setStatus("Check your email for a magic link.");
+      setStatus("Check your email and open the link on this device.");
     }
   };
 
