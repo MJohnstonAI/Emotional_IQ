@@ -1,14 +1,15 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { Audio, AVPlaybackStatus } from "expo-av";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import FidelityContainer from "@/components/FidelityContainer";
 import { useTheme } from "@/design/theme";
 import { palette, radii, shadows, typography } from "@/design/tokens";
-import { Images } from "../../assets/images";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import { useBranchingGameStore } from "@/state/branchingGameStore";
+import { Images } from "../../assets/images";
 
 const scoreFromCorrect = (correctCount: number) => {
   if (correctCount >= 3) return 100;
@@ -17,11 +18,23 @@ const scoreFromCorrect = (correctCount: number) => {
   return 0;
 };
 
+const waitForPlaybackEnd = (sound: Audio.Sound) =>
+  new Promise<void>((resolve) => {
+    sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
+      if (!status.isLoaded) return;
+      if (status.didJustFinish) {
+        sound.setOnPlaybackStatusUpdate(null);
+        resolve();
+      }
+    });
+  });
+
 export default function RevealScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { puzzle, selections } = useBranchingGameStore();
   const [globalPercent, setGlobalPercent] = useState<number | null>(null);
+  const hasPlayedReward = useRef(false);
 
   const correctCount = useMemo(() => {
     if (!puzzle) return 0;
@@ -32,6 +45,39 @@ export default function RevealScreen() {
   }, [puzzle, selections]);
 
   const score = scoreFromCorrect(correctCount);
+
+  useEffect(() => {
+    if (score !== 100 || hasPlayedReward.current) return;
+    hasPlayedReward.current = true;
+    let cancelled = false;
+
+    const playRewards = async () => {
+      try {
+        const scoreSound = await Audio.Sound.createAsync(
+          require("../../assets/sounds/scoreperfect3.mp3"),
+          { shouldPlay: true }
+        );
+        await waitForPlaybackEnd(scoreSound.sound);
+        await scoreSound.sound.unloadAsync();
+        if (cancelled) return;
+
+        const medalSound = await Audio.Sound.createAsync(
+          require("../../assets/sounds/medal_applause.wav"),
+          { shouldPlay: true }
+        );
+        await waitForPlaybackEnd(medalSound.sound);
+        await medalSound.sound.unloadAsync();
+      } catch {
+        // Best-effort audio: ignore failures.
+      }
+    };
+
+    playRewards();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [score]);
 
   useEffect(() => {
     if (!puzzle || !supabaseEnabled || !supabase) {
@@ -63,7 +109,6 @@ export default function RevealScreen() {
             <Text style={styles.scoreText}>Score {score}/100</Text>
           </View>
 
-
           {score === 100 ? (
             <View style={styles.trophyContainer}>
               <Image
@@ -74,6 +119,7 @@ export default function RevealScreen() {
               <Text style={styles.trophySubtext}>PERFECT RESONANCE</Text>
             </View>
           ) : null}
+
           <Text style={[styles.headline, { color: colors.textMain }]}>The Truth</Text>
 
           <View style={styles.truthCard}>
@@ -86,7 +132,9 @@ export default function RevealScreen() {
             <View style={styles.statRow}>
               <Text style={styles.statLabel}>Global result</Text>
               <Text style={styles.statValue}>
-                {globalPercent == null ? "Only 27% got this right" : `Only ${globalPercent}% got this right`}
+                {globalPercent == null
+                  ? "Only 27% got this right"
+                  : `Only ${globalPercent}% got this right`}
               </Text>
             </View>
             <View style={styles.statRow}>
@@ -104,10 +152,7 @@ export default function RevealScreen() {
         </ScrollView>
 
         <View style={styles.bottomBar}>
-          <Pressable
-            onPress={() => router.replace("/(tabs)/home")}
-            style={styles.primaryButton}
-          >
+          <Pressable onPress={() => router.replace("/(tabs)/home")} style={styles.primaryButton}>
             <MaterialIcons name="home" size={18} color="#0f172a" />
             <Text style={styles.primaryText}>Back to Home</Text>
           </Pressable>
@@ -295,7 +340,3 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
   },
 });
-
-
-
-
