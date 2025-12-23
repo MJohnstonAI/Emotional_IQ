@@ -1,11 +1,12 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import FidelityContainer from "@/components/FidelityContainer";
 import { useTheme } from "@/design/theme";
 import { palette, radii, shadows, typography } from "@/design/tokens";
+import { Images } from "../../assets/images";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 import { useBranchingGameStore } from "@/state/branchingGameStore";
 
@@ -62,6 +63,17 @@ export default function RevealScreen() {
             <Text style={styles.scoreText}>Score {score}/100</Text>
           </View>
 
+
+          {score === 100 ? (
+            <View style={styles.trophyContainer}>
+              <Image
+                source={Images.resultsMedal}
+                style={styles.trophyImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.trophySubtext}>PERFECT RESONANCE</Text>
+            </View>
+          ) : null}
           <Text style={[styles.headline, { color: colors.textMain }]}>The Truth</Text>
 
           <View style={styles.truthCard}>
@@ -139,6 +151,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 1.5,
     textTransform: "uppercase",
+  },
+  trophyContainer: {
+    alignItems: "center",
+    marginTop: 6,
+    marginBottom: 2,
+    shadowColor: palette.dark.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  trophyImage: {
+    width: 120,
+    height: 120,
+  },
+  trophySubtext: {
+    marginTop: -8,
+    fontSize: 10,
+    fontFamily: typography.fonts.displayBold,
+    color: palette.dark.accent,
+    letterSpacing: 3,
   },
   headline: {
     fontSize: 34,
@@ -262,3 +295,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
   },
 });
+
+
+
+
