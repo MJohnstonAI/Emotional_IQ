@@ -47,36 +47,31 @@ export default function RevealScreen() {
   const score = scoreFromCorrect(correctCount);
 
   useEffect(() => {
-    if (score !== 100 || hasPlayedReward.current) return;
-    hasPlayedReward.current = true;
-    let cancelled = false;
-
-    const playRewards = async () => {
+    if (hasPlayedReward.current) return;
+    hasPlayedReward.current = true;\nconst playRewards = async () => {
       try {
-        const scoreSound = await Audio.Sound.createAsync(
-          require("../../assets/sounds/scoreperfect3.mp3"),
-          { shouldPlay: true }
-        );
-        await waitForPlaybackEnd(scoreSound.sound);
-        await scoreSound.sound.unloadAsync();
-        if (cancelled) return;
+        if (score === 100) {
+          const medalSound = await Audio.Sound.createAsync(
+            require("../../assets/sounds/medal_applause.wav"),
+            { shouldPlay: true }
+          );
+          await waitForPlaybackEnd(medalSound.sound);
+          await medalSound.sound.unloadAsync();
+          return;
+        }
 
-        const medalSound = await Audio.Sound.createAsync(
-          require("../../assets/sounds/medal_applause.wav"),
+        const revealSound = await Audio.Sound.createAsync(
+          require("../../assets/sounds/bigreveal.mp3"),
           { shouldPlay: true }
         );
-        await waitForPlaybackEnd(medalSound.sound);
-        await medalSound.sound.unloadAsync();
+        await waitForPlaybackEnd(revealSound.sound);
+        await revealSound.sound.unloadAsync();
       } catch {
         // Best-effort audio: ignore failures.
       }
     };
 
     playRewards();
-
-    return () => {
-      cancelled = true;
-    };
   }, [score]);
 
   useEffect(() => {
@@ -340,3 +335,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bodyMedium,
   },
 });
+
