@@ -22,8 +22,22 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=
 
 1. Create a new Supabase project.
 2. In the SQL editor, run `supabase/schema.sql`.
-3. Enable email magic link in Auth settings.
-4. Copy your project URL and anon key into `.env.local`.
+3. (Optional) Seed today's puzzle by running `supabase/seed/001_quiz_seed.sql`.
+4. Enable email magic link in Auth settings.
+5. Copy your project URL and anon key into `.env.local`.
+
+### Migrating an existing dev database
+
+If you previously ran older schemas (e.g. `daily_puzzles` or the JSONB `puzzles` table), run
+`supabase/migrations/003_normalized_quiz_schema.sql` in the SQL editor to drop legacy tables and create the normalized quiz schema.
+
+If you want "any correct except false" grading, run `supabase/migrations/004_quiz_grading_mode.sql`.
+
+## Docs
+
+- `docs/DATABASE_SCHEMA.md` - normalized Supabase schema and rules
+- `docs/SUPABASE_DB_REBUILD.md` - rebuild + verification SQL
+- `docs/AGENT_HANDOVER.md` - AI agent handover notes
 
 ## Android Build
 

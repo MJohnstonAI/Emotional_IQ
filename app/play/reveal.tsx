@@ -11,13 +11,6 @@ import { supabase, supabaseEnabled } from "@/lib/supabase";
 import { useBranchingGameStore } from "@/state/branchingGameStore";
 import { Images } from "../../assets/images";
 
-const scoreFromCorrect = (correctCount: number) => {
-  if (correctCount >= 3) return 100;
-  if (correctCount === 2) return 66;
-  if (correctCount === 1) return 33;
-  return 0;
-};
-
 const waitForPlaybackEnd = (sound: Audio.Sound) =>
   new Promise<void>((resolve) => {
     sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
@@ -32,26 +25,36 @@ const waitForPlaybackEnd = (sound: Audio.Sound) =>
 export default function RevealScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { puzzle, selections } = useBranchingGameStore();
+  const { puzzle, result, submitting, submitError, isCompleted, submitAttempt } =
+    useBranchingGameStore();
   const [globalPercent, setGlobalPercent] = useState<number | null>(null);
   const hasPlayedReward = useRef(false);
+  const hasSubmitted = useRef(false);
 
-  const correctCount = useMemo(() => {
-    if (!puzzle) return 0;
-    return puzzle.rounds.reduce((acc, round, index) => {
-      const selected = selections[index];
-      return acc + (selected && selected === round.correct_key ? 1 : 0);
-    }, 0);
-  }, [puzzle, selections]);
+  useEffect(() => {
+    if (hasSubmitted.current) return;
+    if (!puzzle) return;
+    if (isCompleted || result) return;
+    hasSubmitted.current = true;
+    submitAttempt().catch(() => undefined);
+  }, [isCompleted, puzzle, result, submitAttempt]);
 
-  const score = scoreFromCorrect(correctCount);
+  const score = useMemo(() => Number(result?.score ?? 0), [result?.score]);
+  const correctCount = useMemo(
+    () => Number(result?.correctCount ?? 0),
+    [result?.correctCount]
+  );
+  const questionCount = useMemo(
+    () => Number(result?.questionCount ?? puzzle?.rounds?.length ?? 0),
+    [puzzle?.rounds?.length, result?.questionCount]
+  );
 
   useEffect(() => {
     if (hasPlayedReward.current) return;
     hasPlayedReward.current = true;
     const playRewards = async () => {
       try {
-        if (score === 100) {
+        if (score >= 100) {
           const medalSound = await Audio.Sound.createAsync(
             require("../../assets/sounds/medal_applause.wav"),
             { shouldPlay: true }
@@ -82,7 +85,7 @@ export default function RevealScreen() {
     }
 
     supabase
-      .from("puzzle_stats")
+      .from("quiz_puzzle_stats")
       .select("total_plays,correct_count")
       .eq("puzzle_id", puzzle.id)
       .maybeSingle()
@@ -94,7 +97,7 @@ export default function RevealScreen() {
         const percent = Math.round((data.correct_count / data.total_plays) * 100);
         setGlobalPercent(percent);
       });
-  }, [puzzle]);
+  }, [puzzle, result?.attemptId]);
 
   return (
     <FidelityContainer reference={require("../../assets/stitch-reference/results.png")}>
@@ -102,10 +105,12 @@ export default function RevealScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.scorePill}>
             <MaterialIcons name="psychology" size={18} color={palette.dark.accent} />
-            <Text style={styles.scoreText}>Score {score}/100</Text>
+            <Text style={styles.scoreText}>
+              {submitting ? "Scoring..." : `Score ${score}/100`}
+            </Text>
           </View>
 
-          {score === 100 ? (
+          {score >= 100 ? (
             <View style={styles.trophyContainer}>
               <Image
                 source={Images.resultsMedal}
@@ -135,7 +140,9 @@ export default function RevealScreen() {
             </View>
             <View style={styles.statRow}>
               <Text style={styles.statLabel}>Your accuracy</Text>
-              <Text style={styles.statValue}>{correctCount}/3 correct</Text>
+              <Text style={styles.statValue}>
+                {questionCount ? `${correctCount}/${questionCount} correct` : "Sign in to score"}
+              </Text>
             </View>
           </View>
 
@@ -143,6 +150,13 @@ export default function RevealScreen() {
             <View style={styles.patternCard}>
               <Text style={styles.patternLabel}>Pattern</Text>
               <Text style={styles.patternText}>{puzzle.reveal.pattern}</Text>
+            </View>
+          ) : null}
+
+          {submitError ? (
+            <View style={styles.patternCard}>
+              <Text style={styles.patternLabel}>Submission</Text>
+              <Text style={styles.patternText}>{submitError}</Text>
             </View>
           ) : null}
         </ScrollView>

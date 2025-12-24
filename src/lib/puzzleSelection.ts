@@ -2,16 +2,38 @@ import { utcDateKey } from "@/game/date";
 import type { BranchingPuzzle, PuzzleCategory, PuzzleReveal, PuzzleRound } from "@/game/puzzleTypes";
 import { supabase, supabaseEnabled } from "@/lib/supabase";
 
-type PuzzleRow = {
+type CategoryRow = {
+  name: string;
+};
+
+type OptionRow = {
   id: string;
-  category: PuzzleCategory;
+  position: number;
+  label: string;
+};
+
+type QuestionRow = {
+  id: string;
+  position: number;
+  question: string;
+  question_type: "yes_no" | "true_false" | "single_choice" | "multi_choice";
+  allow_multiple: boolean;
+  grading_mode: "exact" | "any_correct_without_false";
+  quiz_answer_options: OptionRow[];
+};
+
+type QuizPuzzleRow = {
+  id: string;
+  puzzle_date: string;
+  title: string | null;
   context: string;
   message: string;
-  rounds: PuzzleRound[];
-  reveal: PuzzleReveal;
-  is_daily: boolean;
-  daily_date: string | null;
+  reveal_truth: string | null;
+  reveal_explanation: string | null;
+  reveal_pattern: string | null;
   is_active: boolean;
+  category: CategoryRow | null;
+  questions: QuestionRow[] | null;
 };
 
 export type DailyPuzzleSelection = {
@@ -26,20 +48,69 @@ export type PracticePuzzleSelection = {
   error?: string;
 };
 
-const puzzleSelectFields =
-  "id,category,context,message,rounds,reveal,is_daily,daily_date,is_active";
+const quizPuzzleSelectFields = `
+  id,
+  puzzle_date,
+  title,
+  context,
+  message,
+  reveal_truth,
+  reveal_explanation,
+  reveal_pattern,
+  is_active,
+  category:categories(name),
+  questions:quiz_questions(
+    id,
+    position,
+    question,
+    question_type,
+    allow_multiple,
+    grading_mode,
+    quiz_answer_options(
+      id,
+      position,
+      label
+    )
+  )
+`;
 
-const mapPuzzleRow = (row: PuzzleRow): BranchingPuzzle => ({
-  id: row.id,
-  category: row.category,
-  context: row.context,
-  message: row.message,
-  rounds: row.rounds,
-  reveal: row.reveal,
-  isDaily: row.is_daily,
-  dailyDate: row.daily_date,
-  isActive: row.is_active,
-});
+const mapQuizPuzzleRow = (row: QuizPuzzleRow): BranchingPuzzle => {
+  const reveal: PuzzleReveal = {
+    truth: row.reveal_truth ?? "",
+    explanation: row.reveal_explanation ?? "",
+    pattern: row.reveal_pattern ?? undefined,
+  };
+
+  const rounds: PuzzleRound[] = (row.questions ?? [])
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .map((question) => ({
+      id: question.id,
+      question: question.question,
+      question_type: question.question_type,
+      allow_multiple: question.allow_multiple,
+      grading_mode: question.grading_mode,
+      options: (question.quiz_answer_options ?? [])
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((option) => ({
+          key: option.id,
+          label: option.label,
+        })),
+    }));
+
+  return {
+    id: row.id,
+    category: (row.category?.name ?? "General") as PuzzleCategory,
+    context: row.context,
+    message: row.message,
+    rounds,
+    reveal,
+    isDaily: true,
+    dailyDate: row.puzzle_date,
+    isActive: row.is_active,
+  };
+};
 
 const quoteLiteral = (value: string) => `'${value.replace(/'/g, "''")}'`;
 
@@ -52,11 +123,12 @@ export const fetchDailyPuzzle = async (
   }
 
   const { data, error } = await supabase
-    .from("puzzles")
-    .select(puzzleSelectFields)
-    .eq("is_daily", true)
-    .eq("daily_date", dateKey)
+    .from("quiz_puzzles")
+    .select(quizPuzzleSelectFields)
+    .eq("puzzle_date", dateKey)
     .eq("is_active", true)
+    .order("position", { foreignTable: "quiz_questions", ascending: true })
+    .order("position", { foreignTable: "quiz_questions.quiz_answer_options", ascending: true })
     .maybeSingle();
 
   if (error) {
@@ -67,13 +139,13 @@ export const fetchDailyPuzzle = async (
     return { puzzle: null, isCompleted: false };
   }
 
-  const puzzle = mapPuzzleRow(data as PuzzleRow);
+  const puzzle = mapQuizPuzzleRow(data as unknown as QuizPuzzleRow);
   if (!userId) {
     return { puzzle, isCompleted: false };
   }
 
   const { data: completion, error: completionError } = await supabase
-    .from("user_puzzle_completions")
+    .from("user_quiz_attempts")
     .select("id")
     .eq("user_id", userId)
     .eq("puzzle_id", puzzle.id)
@@ -98,11 +170,24 @@ export const fetchPracticePuzzle = async (
     return { puzzle: null, exhausted: false, error: "Auth required" };
   }
 
+  const { data: categoryRow, error: categoryError } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("name", category)
+    .maybeSingle();
+
+  if (categoryError) {
+    return { puzzle: null, exhausted: false, error: categoryError.message };
+  }
+
+  if (!categoryRow?.id) {
+    return { puzzle: null, exhausted: true, error: "Unknown category" };
+  }
+
   const { data: completedRows, error: completedError } = await supabase
-    .from("user_puzzle_completions")
+    .from("user_quiz_attempts")
     .select("puzzle_id")
-    .eq("user_id", userId)
-    .eq("category", category);
+    .eq("user_id", userId);
 
   if (completedError) {
     return { puzzle: null, exhausted: false, error: completedError.message };
@@ -113,12 +198,13 @@ export const fetchPracticePuzzle = async (
     .filter(Boolean);
 
   let query = supabase
-    .from("puzzles")
-    .select(puzzleSelectFields)
-    .eq("category", category)
-    .eq("is_daily", false)
+    .from("quiz_puzzles")
+    .select(quizPuzzleSelectFields)
     .eq("is_active", true)
-    .order("created_at", { ascending: false })
+    .eq("category_id", String(categoryRow.id))
+    .order("position", { foreignTable: "quiz_questions", ascending: true })
+    .order("position", { foreignTable: "quiz_questions.quiz_answer_options", ascending: true })
+    .order("puzzle_date", { ascending: false })
     .limit(25);
 
   if (completedIds.length > 0) {
@@ -137,6 +223,6 @@ export const fetchPracticePuzzle = async (
   }
 
   const randomIndex = Math.floor(Math.random() * puzzles.length);
-  const puzzle = mapPuzzleRow(puzzles[randomIndex] as PuzzleRow);
+  const puzzle = mapQuizPuzzleRow(puzzles[randomIndex] as unknown as QuizPuzzleRow);
   return { puzzle, exhausted: false };
 };

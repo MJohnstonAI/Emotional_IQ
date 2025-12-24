@@ -10,16 +10,28 @@ import StatTile from "@/components/ui/StatTile";
 import { useTheme } from "@/design/theme";
 import { palette, radii, shadows, typography } from "@/design/tokens";
 import { IAP_PRODUCTS } from "@/lib/iap";
-import { useGameStore } from "@/state/gameStore";
+import { useBranchingGameStore } from "@/state/branchingGameStore";
 import { usePurchaseStore } from "@/state/purchaseStore";
 import { Images } from "../../assets/images";
+import { useEffect } from "react";
 
 export default function HomeScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const today = useGameStore((state) => state.today);
-  const status = useGameStore((state) => state.status);
+  const { puzzle, loading, isCompleted, error, loadDaily } = useBranchingGameStore();
   const purchase = usePurchaseStore((state) => state.purchase);
+
+  useEffect(() => {
+    loadDaily();
+  }, [loadDaily]);
+
+  const statusLabel = loading
+    ? "Loading"
+    : error
+      ? "Unavailable"
+      : isCompleted
+        ? "Complete"
+        : "Not Started";
 
   return (
     <FidelityContainer reference={require("../../assets/stitch-reference/home.png")}>
@@ -43,13 +55,7 @@ export default function HomeScreen() {
             <View style={styles.statusPill}>
               <View style={styles.pingDot} />
               <Text style={styles.statusText}>
-                {status === "won"
-                  ? "Complete"
-                  : status === "in_progress"
-                    ? "In Progress"
-                    : status === "lost"
-                      ? "Finished"
-                      : "Not Started"}
+                {statusLabel}
               </Text>
             </View>
             <GlowImageBackground
@@ -59,16 +65,22 @@ export default function HomeScreen() {
             >
               <View style={styles.heroContent}>
                 <Text style={styles.heroEyebrow}>Today's Puzzle</Text>
-                <Text style={styles.heroTitle}>{today?.category ?? "Tone Check"}</Text>
+                <Text style={styles.heroTitle}>{puzzle?.category ?? "Daily Quiz"}</Text>
                 <Text style={styles.heroBody}>
-                  {today?.message ?? "Open today???s message and tune the tone."}
+                  {puzzle?.message ?? "Open today's message and decode the subtext."}
                 </Text>
               </View>
             </GlowImageBackground>
             <View style={styles.heroAction}>
-              <Pressable style={styles.playButton} onPress={() => router.push("/play/context")}>
+              <Pressable
+                style={[styles.playButton, (!puzzle || loading) && styles.playButtonDisabled]}
+                onPress={() => router.push("/play/context")}
+                disabled={!puzzle || loading}
+              >
                 <MaterialIcons name="play-circle" size={22} color={palette.dark.accent} />
-                <Text style={styles.playButtonText}>Play Today</Text>
+                <Text style={styles.playButtonText}>
+                  {loading ? "Loading..." : "Play Today"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -235,6 +247,9 @@ const styles = StyleSheet.create({
     gap: 10,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
+  },
+  playButtonDisabled: {
+    opacity: 0.6,
   },
   playButtonText: {
     color: "#ffffff",

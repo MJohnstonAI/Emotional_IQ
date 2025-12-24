@@ -8,7 +8,7 @@ export const PUZZLE_CATEGORIES = [
   "Sarcasm Detection",
 ] as const;
 
-export type PuzzleCategory = (typeof PUZZLE_CATEGORIES)[number];
+export type PuzzleCategory = string;
 
 export type PuzzleRoundOption = {
   key: string;
@@ -18,8 +18,10 @@ export type PuzzleRoundOption = {
 export type PuzzleRound = {
   id: string;
   question: string;
+  question_type?: "yes_no" | "true_false" | "single_choice" | "multi_choice";
+  allow_multiple?: boolean;
+  grading_mode?: "exact" | "any_correct_without_false";
   options: PuzzleRoundOption[];
-  correct_key: string;
 };
 
 export type PuzzleReveal = {

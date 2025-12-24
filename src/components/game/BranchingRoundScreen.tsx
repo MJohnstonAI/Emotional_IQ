@@ -15,13 +15,13 @@ export default function BranchingRoundScreen({
 }) {
   const router = useRouter();
   const { colors } = useTheme();
-  const { puzzle, selections, setSelection } = useBranchingGameStore();
+  const { puzzle, selections, toggleSelection } = useBranchingGameStore();
 
   const round = puzzle?.rounds?.[roundIndex];
-  const selectedKey = selections[roundIndex];
+  const selectedKeys = selections[roundIndex] ?? [];
 
   const onCommit = () => {
-    if (!selectedKey) return;
+    if (!selectedKeys.length) return;
     router.replace(nextRoute);
   };
 
@@ -48,11 +48,11 @@ export default function BranchingRoundScreen({
 
         <View style={styles.optionStack}>
           {(round?.options ?? []).map((option) => {
-            const isSelected = selectedKey === option.key;
+            const isSelected = selectedKeys.includes(option.key);
             return (
               <Pressable
                 key={option.key}
-                onPress={() => setSelection(roundIndex, option.key)}
+                onPress={() => toggleSelection(roundIndex, option.key)}
                 style={[
                   styles.optionCard,
                   isSelected && styles.optionCardActive,
@@ -71,9 +71,11 @@ export default function BranchingRoundScreen({
       <View style={styles.bottomBar}>
         <Pressable
           onPress={onCommit}
-          style={[styles.commitButton, !selectedKey && styles.commitButtonDisabled]}
+          style={[styles.commitButton, !selectedKeys.length && styles.commitButtonDisabled]}
         >
-          <Text style={styles.commitText}>Commit Choice</Text>
+          <Text style={styles.commitText}>
+            {round?.allow_multiple ? "Commit Answers" : "Commit Choice"}
+          </Text>
           <MaterialIcons name="arrow-forward" size={20} color="#0f172a" />
         </Pressable>
       </View>

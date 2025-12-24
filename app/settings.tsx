@@ -13,7 +13,7 @@ import { useTheme } from "@/design/theme";
 import { palette, radii, typography } from "@/design/tokens";
 import { IAP_PRODUCTS } from "@/lib/iap";
 import { usePurchaseStore } from "@/state/purchaseStore";
-import { useGameStore } from "@/state/gameStore";
+import { useBranchingGameStore } from "@/state/branchingGameStore";
 import { useSettingsStore } from "@/state/settingsStore";
 import { Images } from "../assets/images";
 
@@ -23,10 +23,10 @@ export default function SettingsScreen() {
   const { theme, setTheme, highContrast, setHighContrast, reduceMotion, setReduceMotion } =
     useSettingsStore();
   const { purchase, restore } = usePurchaseStore();
-  const activePuzzle = useGameStore((state) => state.today);
-  const selectedDate = useGameStore((state) => state.selectedDate);
-  const setSelectedDate = useGameStore((state) => state.setSelectedDate);
-  const advanceDay = useGameStore((state) => state.advanceDay);
+  const activePuzzle = useBranchingGameStore((state) => state.puzzle);
+  const selectedDate = useBranchingGameStore((state) => state.selectedDateKey);
+  const setSelectedDate = useBranchingGameStore((state) => state.setSelectedDateKey);
+  const advanceDay = useBranchingGameStore((state) => state.advanceDay);
 
   return (
     <FidelityContainer reference={require("../assets/stitch-reference/settings.png")}>
@@ -181,8 +181,8 @@ export default function SettingsScreen() {
               <GlassCard style={styles.cardGroup}>
                 <Text style={styles.devTitle}>Time Travel</Text>
                 <Text style={styles.devBody}>
-                  Active: {activePuzzle?.date ?? "???"}{" "}
-                  {selectedDate ? "??? override" : "??? system"}
+                  Active: {activePuzzle?.dailyDate ?? "???"}{" "}
+                  {selectedDate ? "(override)" : "(system)"}
                 </Text>
                 <View style={styles.devButtons}>
                   <Pressable style={styles.devButton} onPress={() => advanceDay(-1)}>
@@ -199,7 +199,7 @@ export default function SettingsScreen() {
                   </Pressable>
                 </View>
                 <Text style={styles.devHint}>
-                  Use this to play 7 ???days??? in ~7 minutes while testing.
+                  Use this to jump across days while testing.
                 </Text>
               </GlassCard>
             </View>
